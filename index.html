@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Second Brain</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #0d0d0d; --surface: #141414; --border: #222;
+      --accent: #c8f135; --accent-dim: #8aaa1f;
+      --text: #f0f0f0; --muted: #555; --danger: #ff4e4e; --entry-bg: #181818;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', monospace; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 0 0 80px; }
+    header { width: 100%; max-width: 680px; padding: 36px 24px 0; display: flex; align-items: baseline; justify-content: space-between; }
+    .logo { font-family: 'Syne', sans-serif; font-size: 1.6rem; font-weight: 800; letter-spacing: -0.04em; }
+    .logo em { font-style: italic; color: var(--accent); }
+    .timer { font-size: 0.75rem; color: var(--muted); letter-spacing: 0.08em; }
+    .timer span { color: var(--accent); font-weight: 700; }
+    .input-area { width: 100%; max-width: 680px; padding: 20px 24px 0; }
+    .hint { font-size: 0.7rem; color: var(--muted); margin-bottom: 10px; letter-spacing: 0.04em; }
+    .hint strong { color: var(--text); }
+    .input-row { display: flex; gap: 8px; align-items: stretch; }
+    textarea { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; padding: 12px 14px; resize: none; min-height: 52px; max-height: 140px; outline: none; transition: border-color 0.15s; line-height: 1.5; }
+    textarea:focus { border-color: var(--accent); }
+    textarea::placeholder { color: var(--muted); }
+    .send-btn { background: var(--accent); border: none; border-radius: 8px; color: #0d0d0d; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.1rem; padding: 0 18px; cursor: pointer; transition: background 0.15s, transform 0.1s; flex-shrink: 0; }
+    .send-btn:hover { background: #d9ff45; }
+    .send-btn:active { transform: scale(0.96); }
+    .time-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 0.7rem; color: var(--muted); }
+    .time-row label { letter-spacing: 0.06em; }
+    .time-input-wrap { display: flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; transition: border-color 0.15s; }
+    .time-input-wrap:focus-within { border-color: var(--accent); }
+    .time-input-wrap input[type="time"] { background: none; border: none; color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; outline: none; width: 80px; cursor: pointer; }
+    .time-input-wrap input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.4); cursor: pointer; }
+    .time-arrow { color: var(--muted); font-size: 0.75rem; }
+    .auto-btn { background: none; border: 1px solid var(--border); color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; padding: 3px 8px; border-radius: 4px; cursor: pointer; margin-left: auto; transition: all 0.15s; letter-spacing: 0.04em; }
+    .auto-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .duration-display { font-size: 0.65rem; color: var(--muted); margin-left: 4px; }
+    .save-status { font-size: 0.65rem; color: var(--muted); margin-top: 6px; min-height: 14px; transition: color 0.3s; }
+    .save-status.ok { color: var(--accent); }
+    .save-status.err { color: var(--danger); }
+    .entries-header { width: 100%; max-width: 680px; padding: 28px 24px 10px; display: flex; align-items: center; justify-content: space-between; }
+    .entries-header h2 { font-family: 'Syne', sans-serif; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+    .entries { width: 100%; max-width: 680px; padding: 0 24px; display: flex; flex-direction: column; gap: 8px; }
+    .entry { background: var(--entry-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 12px; animation: slideIn 0.2s ease; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+    .entry-time { font-size: 0.65rem; color: var(--accent); white-space: nowrap; padding-top: 2px; letter-spacing: 0.04em; }
+    .entry-text { flex: 1; font-size: 0.82rem; line-height: 1.5; color: var(--text); word-break: break-word; }
+    .entry-del { background: none; border: none; color: var(--muted); font-size: 0.9rem; cursor: pointer; padding: 0 2px; line-height: 1; transition: color 0.15s; flex-shrink: 0; }
+    .entry-del:hover { color: var(--danger); }
+    .empty { width: 100%; max-width: 680px; padding: 40px 24px; text-align: center; color: var(--muted); font-size: 0.75rem; line-height: 2; }
+    .empty .lightning { font-size: 2rem; display: block; margin-bottom: 8px; }
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(60px); background: var(--accent); color: #0d0d0d; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.75rem; padding: 8px 18px; border-radius: 999px; z-index: 200; transition: transform 0.25s ease; white-space: nowrap; }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo">Second <em>Brain</em></div>
+  <div class="timer">Session: <span id="timerDisplay">0m</span></div>
+</header>
+<div class="input-area">
+  <div class="hint">⚡ Finish something. Type what you did. Hit <strong>send</strong>.</div>
+  <div class="input-row">
+    <textarea id="entryInput" placeholder="what did you finish?" rows="2" onkeydown="handleKey(event)"></textarea>
+    <button class="send-btn" onclick="addEntry()">↑</button>
+  </div>
+  <div class="time-row">
+    <label>from</label>
+    <div class="time-input-wrap"><input type="time" id="timeFrom" /></div>
+    <span class="time-arrow">→</span>
+    <label>to</label>
+    <div class="time-input-wrap"><input type="time" id="timeTo" /></div>
+    <span class="duration-display" id="durationDisplay"></span>
+    <button class="auto-btn" onclick="setAutoTime()">auto</button>
+  </div>
+  <div class="save-status" id="saveStatus"></div>
+</div>
+<div class="entries-header">
+  <h2>Today's log</h2>
+</div>
+<div class="entries" id="entriesList"></div>
+<div class="empty" id="emptyState">
+  <span class="lightning">⚡</span>
+  Finish something.<br>Type what you did.<br>Hit <strong>send</strong>.
+</div>
+<div class="toast" id="toast"></div>
+<script>
+  // ── REPLACE THESE TWO LINES ──────────────────────────────
+  const SUPABASE_URL = 'YOUR_PROJECT_URL';
+  const SUPABASE_KEY = 'YOUR_ANON_KEY';
+  // ─────────────────────────────────────────────────────────
+
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  let entries = [];
+  let sessionStart = Date.now();
+
+  setInterval(() => {
+    const mins = Math.floor((Date.now() - sessionStart) / 60000);
+    document.getElementById('timerDisplay').textContent = mins + 'm';
+  }, 10000);
+
+  function nowTimeStr() {
+    const d = new Date();
+    return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  }
+
+  function setAutoTime() {
+    document.getElementById('timeTo').value = nowTimeStr();
+    updateDuration();
+  }
+
+  function updateDuration() {
+    const from = document.getElementById('timeFrom').value;
+    const to = document.getElementById('timeTo').value;
+    const el = document.getElementById('durationDisplay');
+    if (from && to) {
+      const [fh, fm] = from.split(':').map(Number);
+      const [th, tm] = to.split(':').map(Number);
+      const diff = (th * 60 + tm) - (fh * 60 + fm);
+      if (diff > 0) { el.textContent = diff + 'm'; return; }
+    }
+    el.textContent = '';
+  }
+
+  document.getElementById('timeFrom').addEventListener('change', updateDuration);
+  document.getElementById('timeTo').addEventListener('change', updateDuration);
+  document.getElementById('timeFrom').value = nowTimeStr();
+  document.getElementById('timeTo').value = nowTimeStr();
+
+  async function loadTodayEntries() {
+    const today = new Date().toISOString().split('T')[0];
+    const { data } = await sb.from('logs').select('*')
+      .gte('created_at', today + 'T00:00:00')
+      .order('created_at', { ascending: false });
+    entries = data || [];
+    render();
+  }
+
+  async function addEntry() {
+    const input = document.getElementById('entryInput');
+    const text = input.value.trim();
+    if (!text) return;
+    const from = document.getElementById('timeFrom').value;
+    const to = document.getElementById('timeTo').value;
+    const status = document.getElementById('saveStatus');
+
+    const { data, error } = await sb.from('logs').insert([{ text, time_from: from, time_to: to }]).select();
+    if (error) {
+      status.textContent = '⚠ Save failed: ' + error.message;
+      status.className = 'save-status err';
+      return;
+    }
+    entries.unshift(data[0]);
+    input.value = '';
+    if (to) document.getElementById('timeFrom').value = to;
+    document.getElementById('timeTo').value = nowTimeStr();
+    updateDuration();
+    status.textContent = '✓ Saved to Supabase';
+    status.className = 'save-status ok';
+    setTimeout(() => { status.textContent = ''; status.className = 'save-status'; }, 2500);
+    render();
+  }
+
+  async function deleteEntry(id) {
+    await sb.from('logs').delete().eq('id', id);
+    entries = entries.filter(e => e.id !== id);
+    render();
+  }
+
+  function render() {
+    const list = document.getElementById('entriesList');
+    const empty = document.getElementById('emptyState');
+    if (entries.length === 0) { list.innerHTML = ''; empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+    list.innerHTML = entries.map(e => {
+      const timeLabel = (e.time_from && e.time_to) ? `${e.time_from} → ${e.time_to}` : e.time_from || '';
+      return `<div class="entry">
+        <div class="entry-time">${timeLabel}</div>
+        <div class="entry-text">${escHtml(e.text)}</div>
+        <button class="entry-del" onclick="deleteEntry(${e.id})" title="remove">×</button>
+      </div>`;
+    }).join('');
+  }
+
+  function escHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addEntry(); }
+    setTimeout(() => { e.target.style.height = ''; e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px'; }, 0);
+  }
+
+  let toastTimer;
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  loadTodayEntries();
+</script>
+</body>
+</html>
