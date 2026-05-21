@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Second Brain — Viewer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root { --bg: #0d0d0d; --surface: #141414; --border: #222; --accent: #c8f135; --text: #f0f0f0; --muted: #555; --entry-bg: #181818; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', monospace; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 0 0 80px; }
+    header { width: 100%; max-width: 680px; padding: 36px 24px 0; display: flex; align-items: baseline; justify-content: space-between; }
+    .logo { font-family: 'Syne', sans-serif; font-size: 1.6rem; font-weight: 800; letter-spacing: -0.04em; }
+    .logo em { font-style: italic; color: var(--accent); }
+    .badge { font-size: 0.65rem; background: var(--surface); border: 1px solid var(--border); color: var(--muted); padding: 3px 8px; border-radius: 4px; }
+    .controls { width: 100%; max-width: 680px; padding: 20px 24px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    input[type="date"] { background: var(--surface); border: 1px solid var(--border); color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; padding: 6px 10px; border-radius: 6px; outline: none; cursor: pointer; }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.4); cursor: pointer; }
+    .refresh-btn { background: none; border: 1px solid var(--border); color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; padding: 6px 12px; border-radius: 6px; cursor: pointer; transition: all 0.15s; }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .count { font-size: 0.65rem; color: var(--muted); margin-left: auto; }
+    .entries-header { width: 100%; max-width: 680px; padding: 24px 24px 10px; }
+    .entries-header h2 { font-family: 'Syne', sans-serif; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+    .entries { width: 100%; max-width: 680px; padding: 0 24px; display: flex; flex-direction: column; gap: 8px; }
+    .entry { background: var(--entry-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 12px; animation: slideIn 0.2s ease; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+    .entry-time { font-size: 0.65rem; color: var(--accent); white-space: nowrap; padding-top: 2px; letter-spacing: 0.04em; }
+    .entry-text { flex: 1; font-size: 0.82rem; line-height: 1.5; color: var(--text); word-break: break-word; }
+    .empty { width: 100%; max-width: 680px; padding: 40px 24px; text-align: center; color: var(--muted); font-size: 0.75rem; line-height: 2; }
+    .loading { color: var(--muted); font-size: 0.75rem; padding: 40px 24px; text-align: center; width: 100%; max-width: 680px; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo">Second <em>Brain</em></div>
+  <div class="badge">view only</div>
+</header>
+<div class="controls">
+  <input type="date" id="datePicker" />
+  <button class="refresh-btn" onclick="loadEntries()">↻ Refresh</button>
+  <span class="count" id="countDisplay"></span>
+</div>
+<div class="entries-header"><h2 id="dateLabel">Today's log</h2></div>
+<div class="loading" id="loadingState">Loading...</div>
+<div class="entries" id="entriesList"></div>
+<div class="empty" id="emptyState" style="display:none">No entries for this day.</div>
+
+<script>
+  // ── REPLACE THESE TWO LINES ──────────────────────────────
+  const SUPABASE_URL = 'YOUR_PROJECT_URL';
+  const SUPABASE_KEY = 'YOUR_ANON_KEY';
+  // ─────────────────────────────────────────────────────────
+
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const picker = document.getElementById('datePicker');
+  picker.value = new Date().toISOString().split('T')[0];
+  picker.addEventListener('change', loadEntries);
+
+  // Auto-refresh every 30 seconds
+  setInterval(loadEntries, 30000);
+
+  async function loadEntries() {
+    const date = picker.value;
+    document.getElementById('loadingState').style.display = 'block';
+    document.getElementById('entriesList').innerHTML = '';
+    document.getElementById('emptyState').style.display = 'none';
+
+    const { data } = await sb.from('logs').select('*')
+      .gte('created_at', date + 'T00:00:00')
+      .lt('created_at', date + 'T23:59:59')
+      .order('created_at', { ascending: false });
+
+    document.getElementById('loadingState').style.display = 'none';
+    const entries = data || [];
+    document.getElementById('countDisplay').textContent = entries.length + ' entries';
+    document.getElementById('dateLabel').textContent = new Date(date).toLocaleDateString('en-IN', { weekday:'long', month:'long', day:'numeric' });
+
+    if (entries.length === 0) { document.getElementById('emptyState').style.display = 'block'; return; }
+
+    document.getElementById('entriesList').innerHTML = entries.map(e => {
+      const timeLabel = (e.time_from && e.time_to) ? `${e.time_from} → ${e.time_to}` : e.time_from || '';
+      return `<div class="entry">
+        <div class="entry-time">${timeLabel}</div>
+        <div class="entry-text">${escHtml(e.text)}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function escHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  loadEntries();
+</script>
+</body>
+</html>
